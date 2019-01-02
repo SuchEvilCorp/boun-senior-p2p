@@ -10,6 +10,7 @@ mongoose.Promise = global.Promise;
 
 const app = express();
 const connectedPeers = new Set();
+const lastOnline = new Map();
 
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
@@ -25,7 +26,8 @@ app.use(bodyParser.json());
 app.get('/', (req, res) => res.json({ status: 'ok' }));
 
 app.get('/peers', (req, res) => {
-  res.json({ peers: Array.from(connectedPeers), count: connectedPeers.size });
+  const peers = Array.from(connectedPeers).map(id => ({ id, lastOnline: lastOnline.get(id) }));
+  res.json({ peers, count: connectedPeers.size });
 });
 
 app.post('/register', async (req, res) => {
@@ -58,6 +60,7 @@ io.on('connection', (socket) => {
     console.log('New peer: %s', peerId);
     _peerId = peerId;
     connectedPeers.add(peerId);
+    lastOnline.set(peerId, Date.now());
     setTtl(peerId);
   });
 
@@ -66,6 +69,7 @@ io.on('connection', (socket) => {
     if (!connectedPeers.has(peerId)) {
       connectedPeers.add(peerId);
     }
+    lastOnline.set(peerId, Date.now());
     setTtl(peerId);
   });
 
