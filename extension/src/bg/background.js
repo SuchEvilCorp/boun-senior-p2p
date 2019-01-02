@@ -1,32 +1,49 @@
-function openOrFocusOptionsPage() {
-  var optionsUrl = chrome.extension.getURL('src/options_custom/index.html');
-  chrome.tabs.query({}, function(extensionTabs) {
-     var found = false;
-     for (var i=0; i < extensionTabs.length; i++) {
-        if (optionsUrl == extensionTabs[i].url) {
-           found = true;
-           console.log("tab id: " + extensionTabs[i].id);
-           chrome.tabs.update(extensionTabs[i].id, {"selected": true});
-        }
-     }
-     if (found == false) {
-         chrome.tabs.create({url: "src/options_custom/index.html"});
-     }
-  });
-}
-chrome.extension.onConnect.addListener(function(port) {
- var tab = port.sender.tab;
- // This will get called by the content script we execute in
- // the tab as a result of the user pressing the browser action.
- port.onMessage.addListener(function(info) {
-   var max_length = 1024;
-   if (info.selection.length > max_length)
-     info.selection = info.selection.substring(0, max_length);
-     openOrFocusOptionsPage();
- });
-});
+setTimeout(() => {
+  const getFpThen = (fn) => {
+    Fingerprint2.get({excludes: {touchSupport: true}}, function (components) {
+      var values = components.map(function (component) { return component.value });
+      fp = Fingerprint2.x64hash128(values.join(''), 31);
+      return fn(fp, components);
+    })
+  }
 
-// Called when the user clicks on the browser action icon.
-chrome.browserAction.onClicked.addListener(function(tab) {
-  openOrFocusOptionsPage();
-});
+  getFpThen((userFp, components) => {
+    var socket = io('http://localhost:3140');
+    socket.on('connect', function(){
+      console.log('Socket connected');
+      main();
+    });
+    socket.on('event', function(data){});
+    socket.on('disconnect', function(){});
+
+
+    var peer = new Peer(userFp);
+
+    var main = function () {
+      const onPeerConnected = () => {
+        localStorage.setItem('peerId', peer.id);
+        console.log('Peer connected: %s', peer.id);
+        socket.emit('peerConnected', peer.id);
+        // remind the socket that this peer is still connected
+        setInterval(() => {
+          socket.emit('peerHealthy', peer.id);
+        }, 3 * 1000);
+      }
+      const waitForIdInterval = setInterval(() => {
+        if (peer.id) {
+          clearInterval(waitForIdInterval);
+          onPeerConnected();
+          return;
+        }
+      }, 50);
+
+      peer.on('connection', function(conn) {
+        console.log(peer);
+        conn.on('data', function(data){
+          // Will print 'hi!'
+          console.log(data);
+        });
+      });
+    }
+  });
+}, 1000);

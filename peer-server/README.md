@@ -4,7 +4,7 @@ Peery P2P server that connects peers to each other.
 
 ## Running the Server
 
-We use Docker to build the server easily on each platform:
+We use Docker to build the server:
 
 ```
 docker build -t p2p-server .

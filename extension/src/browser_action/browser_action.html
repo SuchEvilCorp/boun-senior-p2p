@@ -1,17 +1,183 @@
 <!doctype html>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css" />
 <style type="text/css">
-	#mainPopup {
-		padding: 10px;
-		height: 200px;
-		width: 400px;
-		font-family: Helvetica, Ubuntu, Arial, sans-serif;
-	}
-	h1 {
-		font-size: 2em;
-	}
+  #mainPopup {
+    padding: 10px 20px;
+    width: 400px;
+  }
+
+  h1 {
+    font-size: 2em;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0px !important;
+  }
+
+  body {
+    margin: 0px auto;
+    overflow-y: scroll;
+    height: 100%;
+  }
+
+  .section:before,
+  .section:after {
+    content: '';
+    clear: both;
+    display: table;
+  }
+
+  .box {
+    margin: 0 20px;
+  }
+
+  .box:first-child {
+    border-top: 1px solid rgba(255, 255, 255, .2);
+  }
+
+  @media screen and (min-width: 840px) {
+
+    .section {
+      border-top: 1px solid rgba(255, 255, 255, .2);
+    }
+
+    .box {
+      margin: 0 auto;
+      padding: 10px 0;
+      width: 50%;
+      float: left;
+    }
+
+    .box:first-child {
+      border: 0;
+      padding-top: 10px;
+    }
+
+    .box:last-child {
+      padding-bottom: 10px;
+      border-bottom: 0;
+    }
+
+  }
+
+  label {
+    margin-top: 8px;
+  }
+
+  .info {
+    margin-bottom: 16px;
+  }
+
+  .bar {
+    height: 8px;
+    margin-top: 4px;
+    background: rgba(0, 0, 0, .4);
+    overflow-x: hidden;
+  }
+
+  .bar-section {
+    height: 100%;
+    float: left;
+    transition: transform .5s ease-in-out;
+  }
+
+  .dim {
+    opacity: .4;
+    width: 6px;
+    text-align: center;
+    display: inline-block;
+  }
+
+  .used {
+    width: 100%;
+    background: rgba(143, 230, 143, .8);
+    box-shadow: inset 0 -1px 1px rgba(255, 255, 255, .5);
+  }
+
+  .small {
+    font-size: 80%;
+  }
+
+  #local-adapters {
+    white-space: nowrap;
+  }
+
+  .hidden {
+    display: none;
+  }
 </style>
+<script src="system.js"></script>
+<script src="popup.js"></script>
 
 <div id="mainPopup">
-<h1>Hello "extensionilizer"!</h1>
-<p>To shut this pop-up down, edit the manifest file and remove the "default popup" key. To edit it, just edit ext/browser_action/browser_action.html. The CSS is there, too.</p>
+</div>
+<div class="wrapper system-info">
+  <div id="cpu" class="section">
+    <div class="box">
+      <label for="peer-id">Peery ID:</label>
+      <div id="peer-id" class="info"></div>
+    </div>
+    <div class="box">
+      <label for="cpu-usage">CPU Usage:</label>
+      <div id="cpu-usage" class="info"></div>
+    </div>
+    <div class="box">
+      <label for="memory-usage">Memory Usage:</label>
+      <div id="memory-usage" class="info"></div>
+    </div>
+    <div class="box">
+      <label for="battery-time">Battery Time:</label>
+      <div id="battery-time" class="info"></div>
+    </div>
+    <div class="box">
+      <label for="battery-level">Battery Level:</label>
+      <div id="battery-level" class="info">
+        <div class="bar">
+          <span class="bar-section used"></span>
+        </div>
+      </div>
+    </div>
+    <div class="box">
+      <label for="cpu-name">CPU Name:</label>
+      <div id="cpu-name" class="info"></div>
+      <label for="cpu-arch">CPU Architecture:</label>
+      <div id="cpu-arch" class="info"></div>
+      <label for="cpu-features">CPU Features:</label>
+      <div id="cpu-features" class="small info"></div>
+    </div>
+  </div>
+  <div id="memory" class="section">
+    <div class="box">
+      <label for="memory-capacity">Memory Capacity:</label>
+      <div id="memory-capacity" class="info"></div>
+    </div>
+  </div>
+  <div id="battery" class="section">
+    <div class="box">
+      <label for="battery-status">Battery Status:</label>
+      <div id="battery-status" class="info"></div>
+    </div>
+  </div>
+  <div id="info" class="section">
+    <div class="box">
+      <label for="operating-system">Operating System:</label>
+      <div id="operating-system" class="info"></div>
+      <label for="platform">Platform:</label>
+      <div id="platform" class="info"></div>
+    </div>
+    <div class="box">
+      <label for="chrome-version">Chrome Version:</label>
+      <div id="chrome-version" class="info"></div>
+    </div>
+  </div>
+  <div id="storage" class="section">
+    <div id="internal-storage" class="box">
+      <label for="internal-storage-units">Internal Storage:</label>
+      <div id="internal-storage-units" class="small info"></div>
+    </div>
+    <div id="external-storage" class="box">
+      <label for="external-storage-units">External Storage:</label>
+      <div id="external-storage-units" class="small info"></div>
+    </div>
+  </div>
 </div>

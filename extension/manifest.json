@@ -11,7 +11,12 @@
   },
   "default_locale": "en",
   "permissions": [
-    "tabs"
+    "tabs",
+    "system.cpu",
+    "system.display",
+    "system.memory",
+    "system.network",
+    "system.storage"
   ],
   "background": {
     "page": "src/bg/background.html",
@@ -22,5 +27,6 @@
     "default_icon": "icons/logo.png",
     "default_title": "Peery",
     "default_popup": "src/browser_action/browser_action.html"
-  }
+  },
+  "content_security_policy": "script-src 'self' 'unsafe-inline'; object-src 'self'"
 }
