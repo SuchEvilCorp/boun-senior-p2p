@@ -71,7 +71,7 @@ class App extends Component {
 
           <Card title="Send Task" style={{ marginTop: 20 }}>
             <h4>Code:</h4>
-            <Input.TextArea autosize value={this.state.code} onChange={code => this.setState({ code })} />
+            <Input.TextArea autosize={{ minRows: 2, maxRows: 6 }} value={this.state.code} onChange={e => this.setState({ code: e.target.value })} />
 
             <h4 style={{ marginTop: 10 }}>Data file: (optional)</h4>
             <Upload {...{
