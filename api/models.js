@@ -7,14 +7,17 @@ const UserSchema = new mongoose.Schema({
   peerId: { type: String, index: true }
 }, { timestamps: true });
 
-const TaskSchema= new mongoose.Schema({
-  ownerId: {type: String, index: true },
-  code: {type: String},
-  data: {type: Object}
-}, {timestamps: true });
+const TaskSchema = new mongoose.Schema({
+  ownerId: { type: String, index: true },
+  code: String,
+  data: mongoose.Schema.Types.Mixed,
+  result: mongoose.Schema.Types.Mixed,
+  completedAt: Date,
+  peers: { type: [String], default: [] }
+}, { timestamps: true });
 
 const User = mongoose.model('User', UserSchema);
-const Task= mongoose.model.apply('Task', TaskSchema);
+const Task = mongoose.model('Task', TaskSchema);
 
 module.exports = {
   User,
