@@ -1,38 +1,87 @@
 const express = require('express');
+const XMLHttpRequest = require('xhr2');
+const winston = require('winston');
 const cors = require('cors');
 const helmet = require('helmet');
 const bodyParser = require('body-parser');
 const serializeError = require('serialize-error');
 const mongoose = require('mongoose');
+const _ = require('lodash');
+const Papa = require('papaparse');
+
+const maxChunkSize = 10e3;
+
+global.XMLHttpRequest = XMLHttpRequest;
+
+// set up logging
+const logger = winston.createLogger({
+  format: winston.format.combine(
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  transports: [
+    // write all logs error (and below) to `error.log`.
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+    // write to all logs to `combined.log`
+    new winston.transports.File({ filename: 'combined.log' })
+  ]
+});
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    level: 'debug',
+    format: winston.format.combine(
+      winston.format.splat(),
+      winston.format.simple()
+    )
+  }));
+}
 
 mongoose.connect('mongodb://root:x123123@ds143614.mlab.com:43614/peery');
 mongoose.Promise = global.Promise;
 
 const app = express();
-const connectedPeers = new Set();
-const lastOnline = new Map();
-const availableCPU= new Map();
-const connection= new Map();
+const connectedPeers = {};
+const sockets = {};
 
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
+const uploadS3 = require('./uploadS3');
 const models = require('./models');
 
 const port = process.env.PORT || 3140;
-// Use these later to limit the peer per task and play with the treshold
-const peer_per_task_count= 10;
-const cpu_treshold_for_send= 20;
+const numPeersPerTask = 10;
+const peerMaxCpu = 95; // TODO: use later
 
 app.use(helmet({ noCache: true, hsts: false }));
 app.use(cors({ credentials: true }));
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+const getPeers = () => Object.entries(connectedPeers).map(([id, peerData]) => ({ id, ...peerData }));
+
+const parseData = data => new Promise((resolve, reject) => {
+  if (!data || !data.payload) return [];
+  if (data.type === 'csv') {
+    return Papa.parse(data.payload, {
+      download: !!data.payload.match(/https?:\/\/.*$/),
+      skipEmptyLines: true,
+      trimHeaders: true,
+      dynamicTyping: true,
+      complete: (res) => {
+        resolve(res.data);
+      },
+      error: (err) => {
+        reject(err);
+      }
+    });
+  }
+});
+
 app.get('/', (req, res) => res.json({ status: 'ok' }));
 
 app.get('/peers', (req, res) => {
-  const peers = Array.from(connectedPeers).map(id => ({ id, lastOnline: lastOnline.get(id) }));
-  res.json({ peers, count: connectedPeers.size });
+  const peers = getPeers();
+  res.json({ peers, count: peers.size });
 });
 
 app.post('/register', async (req, res) => {
@@ -50,66 +99,93 @@ app.post('/login', async (req, res) => {
   return res.json(user);
 });
 
-app.post('/task', async(req, res) => {
-  const owner= req.body.ownerId;
-  const codeToRun= req.body.code;
-  const receiverPeers= Array.from(connectedPeers).
-                  map(id => ({ id, availableCPU: availableCPU.get(id) })).
-                  filter(peer => { peer.availableCPU > cpu_threshold_for_send });
-  
-//TODO implement MapReduce here
-  const partitionedData= req.body.data;
-  let tasks= [], i= -1;
-  while(receiverPeers[++i]) {
-    tasks.push({
-                code: codeToRun,
-                receiver: receiverPeers[i],
-                data: partitionedData[i]
-    });
+app.get('/task', async (req, res) => {
+  const tasks = await models.Task.find({});
+  res.json({ tasks, count: tasks.length });
+});
+
+app.post('/task', async (req, res) => {
+  const { ownerId, code, data } = req.body;
+  const peers = getPeers()
+    .filter(peer => peer.cpuUsage < peerMaxCpu)
+    .slice(0, numPeersPerTask);
+  if (!peers.length) return res.status(401).send('No available peers');
+
+  const task = await models.Task.create({ ownerId, code, data });
+  task.peers = peers.map(p => p.id);
+  await task.save();
+
+  // TODO implement MapReduce here
+  let rows = [];
+  try {
+    rows = await parseData(data);
+  } catch (err) {
+    console.error(err);
+    logger.error(err.message);
+    return res.status(401).send(err.message || 'Unexpected error');
   }
-  await tasks.forEach(task => { peer.connect(task.receiver).on('open', (conn) => {
-    conn.send(JSON.stringify({ 
-      code: task.code,
-      data: task.data
-    }));
-  })});
+
+  const chunks = _.chunk(rows, Math.min(rows.length / peers.length, maxChunkSize))
+    // give each chunk the index number so we can build the output asynchronously later
+    .map((chunk, idx) => ({ code, data: chunk, chunkNum: idx }));
+
+  res.json({ queued: true });
+
+  const resultChunks = await Promise.all(
+    chunks.map((chunk, idx) => new Promise((resolve, reject) => {
+      sockets[peers[idx % peers.length].id].emit('task', chunk, (chunkRes) => {
+        // TODO: error handling => on error, give the failed chunk to a new peer
+        resolve(chunkRes);
+      });
+    }))
+  );
+
+  const result = _.flatten(resultChunks);
+  const resultFile = (await uploadS3(result)).Location;
+
+  task.isDone = true;
+  task.completedAt = new Date();
+  task.result = resultFile;
+  await task.save();
 });
 
 io.on('connection', (socket) => {
   let ttl;
-  let _peerId; // eslint-disable-line
+  let _peerId;
 
   const setTtl = (peerId) => {
     clearTimeout(ttl);
     ttl = setTimeout(() => {
-      connectedPeers.delete(peerId);
+      delete connectedPeers[peerId];
     }, 1000 * 5); // 5 min ttl
   };
 
   socket.on('peerConnected', (peerId) => {
-    console.log('New peer: %s', peerId);
+    logger.log('debug', 'New peer: %s', peerId);
     _peerId = peerId;
-    connectedPeers.add(peerId);
-    lastOnline.set(peerId, Date.now());
+    connectedPeers[peerId] = { lastOnline: Date.now() };
+    sockets[peerId] = socket;
     setTtl(peerId);
   });
 
-  socket.on('peerHealthy', (peerId) => {
-    // console.log('Peer healthy: %s', peerId);
-    if (!connectedPeers.has(peerId)) {
-      connectedPeers.add(peerId);
+  socket.on('peerData', ({ id, ...restData }) => {
+    // logger.log('debug', 'Peer data: %s', id, restData);
+    if (!connectedPeers[id]) {
+      connectedPeers[id] = {};
     }
-    lastOnline.set(peerId, Date.now());
-    setTtl(peerId);
+    connectedPeers[id] = { ...connectedPeers[id], ...restData };
+    connectedPeers[id].lastOnline = Date.now();
+    setTtl(id);
   });
 
   socket.on('disconnect', () => {
-    console.log('Peer disconnected: %s', _peerId);
-    connectedPeers.delete(_peerId);
+    logger.log('debug', 'Peer disconnected: %s', _peerId);
+    delete sockets[_peerId];
+    delete connectedPeers[_peerId];
   });
 });
 
-http.listen(port, () => console.log(`Example app listening on port ${port}!`));
+http.listen(port, () => logger.log('info', `Example app listening on port ${port}!`));
 
 // error handler
 app.use((err, req, res, next) => {
