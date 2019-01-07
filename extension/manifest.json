@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "manifest_version": 2,
   "description": "Peer-to-peer resource sharing system",
-  "homepage_url": "https://github.com/SuchEvilCorp/boun-senior-p2p",
+  "homepage_url": "https://github.com/SuchEvilCorp/peery",
   "icons": {
     "16": "icons/logo.png",
     "48": "icons/logo.png",
