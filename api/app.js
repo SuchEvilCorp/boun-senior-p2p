@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const XMLHttpRequest = require('xhr2');
 const winston = require('winston');
