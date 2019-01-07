@@ -1,0 +1,13 @@
+<script>
+window.addEventListener('message', function(event) {
+  var data = event.data;
+  var result = eval(`
+  ${data.code};
+  ${Array.isArray(data.data)
+      // Map the results with `run`
+      ? `var __peeryRun__=rows=>rows.map(run);`
+      : `var __peeryRun__=run;`};
+  __peeryRun__(${JSON.stringify(data.data)})`);
+  event.source.postMessage(result, event.origin);
+});
+</script>

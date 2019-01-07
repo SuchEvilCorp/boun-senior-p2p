@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Peery",
+  "name": "Peery - P2P resource sharing extension",
   "icons": [
     {
       "src": "favicon.ico",
