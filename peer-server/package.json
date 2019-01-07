@@ -26,6 +26,7 @@
     "test": "mocha test",
     "build-image": "docker build -t p2p-server .",
     "run-image": "docker run -d -p ${PORT:=9000}:${PORT:=9000} p2p-server",
+    "start:docker": "npm run build-image && npm run run-image",
     "start": "bin/peerjs --port ${PORT:=9000}"
   }
 }

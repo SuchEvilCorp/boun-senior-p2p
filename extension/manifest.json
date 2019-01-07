@@ -22,6 +22,9 @@
     "page": "src/bg/background.html",
     "persistent": true
   },
+  "sandbox": {
+    "pages": ["src/sandbox.html"]
+  },
   "options_page": "src/options_custom/index.html",
   "browser_action": {
     "default_icon": "icons/logo.png",
