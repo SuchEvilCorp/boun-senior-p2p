@@ -14,6 +14,7 @@ module.exports = {
         "quotes": ["error", "single"],
         "semi": ["error", "always"],
         "no-underscore-dangle": 0,
+        "no-param-reassign": 0,
         "max-len": 0,
     }
 };

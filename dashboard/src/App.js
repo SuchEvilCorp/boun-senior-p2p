@@ -117,8 +117,8 @@ class App extends Component {
       key: 'idx',
     }, {
       title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      dataIndex: '_id',
+      key: '_id',
     }, {
       title: 'Peers',
       dataIndex: 'peers',

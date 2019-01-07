@@ -10,8 +10,6 @@ const mongoose = require('mongoose');
 const _ = require('lodash');
 const Papa = require('papaparse');
 
-const maxChunkSize = 10e3;
-
 global.XMLHttpRequest = XMLHttpRequest;
 
 // set up logging
@@ -50,7 +48,8 @@ const uploadS3 = require('./uploadS3');
 const models = require('./models');
 
 const port = process.env.PORT || 3140;
-const numPeersPerTask = 10;
+const maxChunkSize = 10e3;
+const numPeersPerTask = 50;
 const peerMaxCpu = 95; // TODO: use later
 
 app.use(helmet({ noCache: true, hsts: false }));
@@ -76,6 +75,7 @@ const parseData = data => new Promise((resolve, reject) => {
       }
     });
   }
+  return [];
 });
 
 app.get('/', (req, res) => res.json({ status: 'ok' }));
@@ -116,7 +116,6 @@ app.post('/task', async (req, res) => {
   task.peers = peers.map(p => p.id);
   await task.save();
 
-  // TODO implement MapReduce here
   let rows = [];
   try {
     rows = await parseData(data);
@@ -194,5 +193,44 @@ app.use((err, req, res, next) => {
     error: serializeError(err)
   });
 });
+
+const runAllTasks = () => {
+  models.Task.find({ completedAt: null }).then((tasks) => {
+    tasks.forEach(async (task) => {
+      let rows = [];
+      try {
+        rows = await parseData(task.data);
+      } catch (err) {
+        console.error(err);
+        return;
+      }
+
+      const peers = getPeers();
+
+      const chunks = _.chunk(rows, Math.min(rows.length / peers.length, maxChunkSize))
+      // give each chunk the index number so we can build the output asynchronously later
+        .map((chunk, idx) => ({ code: task.code, data: chunk, chunkNum: idx }));
+
+      const resultChunks = await Promise.all(
+        chunks.map((chunk, idx) => new Promise((resolve, reject) => {
+          sockets[peers[idx % peers.length].id].emit('task', chunk, (chunkRes) => {
+          // TODO: error handling => on error, give the failed chunk to a new peer
+            resolve(chunkRes);
+          });
+        }))
+      );
+
+      const result = _.flatten(resultChunks);
+      const resultFile = (await uploadS3(result)).Location;
+
+      task.isDone = true;
+      task.completedAt = new Date();
+      task.result = resultFile;
+      await task.save();
+    });
+  });
+};
+
+runAllTasks();
 
 module.exports = app;
