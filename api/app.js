@@ -48,9 +48,11 @@ const uploadS3 = require('./uploadS3');
 const models = require('./models');
 
 const port = process.env.PORT || 3140;
-const maxChunkSize = 10e3;
+const maxChunkSize = 1000;
 const numPeersPerTask = 50;
 const peerMaxCpu = 95; // TODO: use later
+
+const tasksOnQueue = {};
 
 app.use(helmet({ noCache: true, hsts: false }));
 app.use(cors({ credentials: true }));
@@ -110,7 +112,7 @@ app.post('/task', async (req, res) => {
   const peers = getPeers()
     .filter(peer => peer.cpuUsage < peerMaxCpu)
     .slice(0, numPeersPerTask);
-  if (!peers.length) return res.status(401).send('No available peers');
+  if (!peers.length) return res.json({ queued: true });
 
   const task = await models.Task.create({ ownerId, code, data });
   task.peers = peers.map(p => p.id);
@@ -130,23 +132,29 @@ app.post('/task', async (req, res) => {
     .map((chunk, idx) => ({ code, data: chunk, chunkNum: idx }));
 
   res.json({ queued: true });
+  tasksOnQueue[task._id] = true;
 
-  const resultChunks = await Promise.all(
-    chunks.map((chunk, idx) => new Promise((resolve, reject) => {
-      sockets[peers[idx % peers.length].id].emit('task', chunk, (chunkRes) => {
-        // TODO: error handling => on error, give the failed chunk to a new peer
-        resolve(chunkRes);
-      });
-    }))
-  );
-
-  const result = _.flatten(resultChunks);
-  const resultFile = (await uploadS3(result)).Location;
-
-  task.isDone = true;
-  task.completedAt = new Date();
-  task.result = resultFile;
-  await task.save();
+  try {
+    const resultChunks = await Promise.all(
+      chunks.map((chunk, idx) => new Promise((resolve, reject) => {
+        sockets[peers[idx % peers.length].id].emit('task', chunk, (chunkRes) => {
+          // TODO: error handling => on error, give the failed chunk to a new peer
+          resolve(chunkRes);
+        });
+      }))
+    );
+    const result = _.flatten(resultChunks);
+    const resultFile = (await uploadS3(result)).Location;
+    task.isDone = true;
+    task.completedAt = new Date();
+    task.result = resultFile;
+    await task.save();
+  } catch (err) {
+    console.error(err);
+    delete tasksOnQueue[task._id];
+    task.peers = [];
+    await task.save();
+  }
 });
 
 io.on('connection', (socket) => {
@@ -196,7 +204,7 @@ app.use((err, req, res, next) => {
 
 const runAllTasks = () => {
   models.Task.find({ completedAt: null }).then((tasks) => {
-    tasks.forEach(async (task) => {
+    tasks.filter(task => !tasksOnQueue[task._id]).forEach(async (task) => {
       let rows = [];
       try {
         rows = await parseData(task.data);
@@ -206,6 +214,7 @@ const runAllTasks = () => {
       }
 
       const peers = getPeers();
+      if (!peers.length) return;
 
       const chunks = _.chunk(rows, Math.min(rows.length / peers.length, maxChunkSize))
       // give each chunk the index number so we can build the output asynchronously later
@@ -231,6 +240,8 @@ const runAllTasks = () => {
   });
 };
 
-runAllTasks();
+setInterval(() => {
+  runAllTasks();
+}, 5000);
 
 module.exports = app;

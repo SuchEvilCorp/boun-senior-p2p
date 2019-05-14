@@ -35,7 +35,7 @@ class App extends Component {
 
     this.refreshDataInterval = setInterval(() => {
       this.refreshActivePeers();
-    }, 1000);
+    }, 3000);
     this.refreshTaskInterval = setInterval(() => {
       this.refreshTasks();
     }, 5000);
@@ -168,9 +168,7 @@ class App extends Component {
                 </Menu.Item>
               </Menu>
               {this.state.dataUploadMethod === 'basic' && (
-                <Fragment>
-                  <Input.TextArea autosize={{ minRows: 4, maxRows: 6 }} value={this.state.data.payload} onChange={e => this.setState({ data: { type: 'csv', payload: e.target.value } })} placeholder="Comma separated values (CSV data)" />
-                </Fragment>
+                <Input.TextArea autosize={{ minRows: 4, maxRows: 6 }} value={this.state.data.payload} onChange={e => this.setState({ data: { type: 'csv', payload: e.target.value } })} placeholder="Comma separated values (CSV data)" />
               )}
               {this.state.dataUploadMethod === 'file' && (
                 <Upload customRequest={this.uploadDataFile}>
